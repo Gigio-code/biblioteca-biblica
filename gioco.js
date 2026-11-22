@@ -11,6 +11,10 @@ const feedback = area("feedback");
 const annuncio = area("announcement");
 const verifica = area("verify");
 const continua = area("next");
+const squadreDialog = area("teams-dialog");
+const risultatoDialog = area("result-dialog");
+const finaleDialog = area("finale-dialog");
+const campoSquadra = area("team-input");
 const mappa = area("library-details");
 const formatoTelefono = matchMedia(
   "(max-width: 599px), (orientation: landscape) and (max-height: 500px) and (max-width: 980px)",
@@ -20,6 +24,7 @@ let livello;
 let sezione;
 let sessione;
 let selezione = null;
+let orologioDa = null;
 
 function elemento(tag, classe, testo) {
   const nodo = document.createElement(tag);
@@ -52,8 +57,11 @@ function nuovaSessione(scelta, precedente) {
   return {
     ordine: mescola(scelta.libri, precedente?.ordine),
     posizioni: Array(scelta.libri.length).fill(null),
-    verificato: false,
-    risolto: precedente?.risolto === true,
+    punteggio: null,
+    verifiche: 0,
+    durata: 0,
+    storico: precedente?.storico === true,
+    migliore: precedente?.migliore ?? null,
   };
 }
 
@@ -79,6 +87,7 @@ function portaInVista(nodo) {
 function apriLivello(scelta, daInterazione = false) {
   const raccolta = biblioteca.find((voce) => voce.id === scelta.sezione);
   if (!disponibile(scelta, raccolta)) return;
+  fermaOrologio();
   livello = scelta;
   sezione = raccolta;
   sessione = progressi.sessioni[scelta.id] ?? nuovaSessione(scelta);
@@ -93,6 +102,7 @@ function apriLivello(scelta, daInterazione = false) {
   mostraNavigazione();
   mostraGioco();
   registra();
+  avviaOrologio();
 
   if (daInterazione) {
     if (formatoTelefono.matches) mappa.open = false;
@@ -122,7 +132,16 @@ function intervallo(gruppo) {
 }
 
 function mostraMappa() {
-  const sistemati = biblioteca.reduce((totale, raccolta) => totale + libriSistemati(raccolta), 0);
+  const dati = riepilogo();
+  const sistemati = dati.libri;
+  mostraStatistiche(area("library-stats"), [
+    ["Livelli", `${dati.livelli} / ${livelliBiblioteca.length}`],
+    ["Sezioni", `${dati.sezioni} / ${biblioteca.length}`],
+    ["Stelle", `${dati.stelle} / ${massimoStelle}`],
+    ["Verifiche", dati.verifiche],
+  ]);
+  area("show-finale").hidden = dati.livelli !== livelliBiblioteca.length;
+  area("legacy-note").hidden = !Object.values(progressi.sessioni).some((stato) => stato.storico);
   area("library-count").textContent = `${sistemati} / ${totaleBiblioteca} sistemati`;
   area("library-remaining").textContent = `${totaleBiblioteca - sistemati} da sistemare`;
   area("library-meter-fill").style.width = `${sistemati / totaleBiblioteca * 100}%`;
@@ -202,6 +221,9 @@ function mostraIndice() {
       libri.start = gruppo.libri[0].numero;
       libri.append(...gruppo.libri.map((libro) => elemento("li", "", libro.titolo)));
       sezioneIndice.append(libri);
+      const migliore = progressi.sessioni[gruppo.id].migliore;
+      if (migliore) sezioneIndice.append(elemento("p", "catalog-rating",
+        `${stellePer(migliore.verifiche)} / 3 stelle · ${testoVerifiche(migliore.verifiche)} · ${formattaTempo(migliore.durata)}`));
     } else {
       sezioneIndice.append(elemento("p", "", `${gruppo.libri.length} libri da sistemare`));
     }
@@ -232,24 +254,19 @@ function dorso(libro) {
   return copertina;
 }
 
-function mostraScaffale(esito) {
+function mostraScaffale() {
   shelf.replaceChildren(...sessione.posizioni.map((codice, indice) => {
     const numero = livello.libri[indice].numero;
     const libro = livello.libri.find((voce) => voce.id === codice);
     const slot = bottone("slot");
-    const corretta = esito?.[indice];
-    const legenda = esito ? (corretta ? ", posizione corretta" : ", posizione da rivedere") : "";
-    slot.setAttribute("aria-label", `Posizione ${numero}, ${libro?.titolo ?? "vuota"}${legenda}`);
+    slot.setAttribute("aria-label", `Posizione ${numero}, ${libro?.titolo ?? "vuota"}`);
+    slot.disabled = concluso();
     if (libro) {
       slot.classList.add("occupied");
       slot.setAttribute("aria-pressed", String(codice === selezione));
     }
     if (selezione && codice !== selezione) slot.classList.add("destination");
     slot.append(elemento("span", "slot-number", numero), libro ? dorso(libro) : elemento("span", "slot-empty", "+"));
-    if (esito) {
-      slot.dataset.result = corretta ? "right" : "retry";
-      slot.append(elemento("span", "slot-result", corretta ? "✓" : "×"));
-    }
     slot.addEventListener("click", (evento) => {
       toccaPosizione(indice, evento.detail === 0);
     });
@@ -286,48 +303,41 @@ function mostraLibriDisponibili() {
   }
 }
 
+function concluso() {
+  return Boolean(sessione && livello && sessione.punteggio === livello.libri.length);
+}
+
 function mostraGioco() {
   const totale = livello.libri.length;
   const collocati = sessione.posizioni.filter(Boolean).length;
-  const esito = sessione.verificato
-    ? sessione.posizioni.map((codice, indice) => codice === livello.libri[indice].id) : null;
-  mostraScaffale(esito);
+  mostraScaffale();
   mostraLibriDisponibili();
   area("placed-count").textContent = `${collocati} / ${totale} collocati`;
   area("progress-dots").replaceChildren(...livello.libri.map((_, indice) =>
     elemento("span", indice < collocati ? "filled" : "")));
   const selezionato = livello.libri.find((libro) => libro.id === selezione);
-  shelfTip.textContent = selezionato
+  shelfTip.textContent = concluso() ? "Sequenza completata." : selezionato
     ? `${selezionato.titolo} selezionato. Tocca una posizione.`
     : "Per scambiare due libri, toccali uno dopo l’altro sullo scaffale.";
   board.classList.toggle("placing", Boolean(selezione));
-  verifica.disabled = collocati !== totale;
-  continua.hidden = true;
+  verifica.disabled = collocati !== totale || sessione.punteggio !== null;
+  area("reset").hidden = concluso();
+  area("view-result").hidden = !concluso();
+  aggiornaOrologio();
 
-  if (!esito) {
+  if (sessione.punteggio === null) {
     feedback.removeAttribute("data-result");
     feedback.textContent = collocati === totale
       ? "Lo scaffale è pieno. Ora puoi verificare l’ordine."
       : "Colloca tutti i libri per verificare l’ordine.";
     return;
   }
-
-  const corretti = esito.filter(Boolean).length;
-  const vittoria = corretti === totale;
-  let messaggio = "Sposta i libri da rivedere, poi verifica di nuovo.";
-  if (vittoria) {
-    const tappa = prossimaTappa();
-    messaggio = !tappa ? `Biblioteca completata. Hai sistemato tutti i ${totaleBiblioteca} libri!`
-      : sezione.livelli.every(risolto) ? "Hai completato la sezione!" : "Hai completato lo scaffale!";
-    if (tappa) {
-      continua.textContent = tappa.sezione === sezione.id ? `Vai al livello ${tappa.numero}` : "Prossima sezione";
-      continua.hidden = false;
-    }
-  }
-  feedback.dataset.result = vittoria ? "right" : "retry";
+  const corretti = sessione.punteggio;
+  feedback.dataset.result = concluso() ? "right" : "retry";
   feedback.replaceChildren(
-    elemento("strong", "", `${corretti} su ${totale} in posizione corretta`),
-    elemento("span", "", messaggio),
+    elemento("strong", "", `${corretti} ${corretti === 1 ? "libro" : "libri"} su ${totale} in posizione corretta`),
+    elemento("span", "", concluso() ? "Avete completato lo scaffale." :
+      "Discutete e riprovate!"),
   );
 }
 
@@ -348,7 +358,7 @@ function toccaPosizione(indice, daTastiera) {
   sessione.posizioni[indice] = selezione;
   if (origine !== -1) sessione.posizioni[origine] = codice;
   selezione = null;
-  sessione.verificato = false;
+  sessione.punteggio = null;
   mostraGioco();
   registra();
 
@@ -362,30 +372,47 @@ function toccaPosizione(indice, daTastiera) {
 }
 
 verifica.addEventListener("click", () => {
-  if (sessione.posizioni.some((codice) => !codice)) return;
+  if (verifica.disabled) return;
   selezione = null;
-  sessione.verificato = true;
-  if (!sessione.risolto && sessione.posizioni.every((codice, indice) => codice === livello.libri[indice].id)) {
-    sessione.risolto = true;
-    mostraNavigazione();
+  sessione.verifiche++;
+  progressi.verifiche++;
+  const corretti = contaCorretti(livello, sessione.posizioni);
+  if (corretti === livello.libri.length) {
+    fermaOrologio();
+    const risultato = { verifiche: sessione.verifiche, durata: sessione.durata };
+    sessione.migliore = miglioreTra(sessione.migliore, risultato);
   }
+  sessione.punteggio = corretti;
+  mostraNavigazione();
   mostraGioco();
   registra();
+  if (concluso()) mostraRisultato();
 });
 
 area("reset").addEventListener("click", () => {
-  sessione = nuovaSessione(livello, sessione);
-  progressi.sessioni[livello.id] = sessione;
+  if (concluso()) return;
+  sessione.ordine = mescola(livello.libri, sessione.ordine);
+  sessione.posizioni.fill(null);
+  sessione.punteggio = null;
   selezione = null;
   mostraGioco();
   registra();
-  annuncio.textContent = "Scaffale svuotato. Libri mescolati.";
+  annuncio.textContent = "Scaffale svuotato. Verifiche e tempo conservati.";
   portaInVista(shelf);
+});
+
+area("view-result").addEventListener("click", mostraRisultato);
+area("replay").addEventListener("click", () => {
+  progressi.sessioni[livello.id] = nuovaSessione(livello, sessione);
+  risultatoDialog.close();
+  apriLivello(livello, true);
 });
 
 continua.addEventListener("click", () => {
   const tappa = prossimaTappa();
+  risultatoDialog.close();
   if (tappa) apriLivello(tappa, true);
+  else mostraFinale();
 });
 
 document.addEventListener("keydown", (evento) => {
@@ -413,6 +440,208 @@ osservaFormato(telefonoVerticale, () => {
   board.prepend(area(telefonoVerticale.matches ? "tray" : "shelf-panel"));
 });
 
-const sceltaSalvata = livelliBiblioteca.find((gruppo) => gruppo.id === progressi.attivo);
-const sezioneSalvata = biblioteca.find((voce) => voce.id === sceltaSalvata.sezione);
-apriLivello(disponibile(sceltaSalvata, sezioneSalvata) ? sceltaSalvata : vistaSezione(sezioneSalvata));
+function formattaTempo(durata) {
+  const secondi = Math.floor(durata / 1000);
+  const ore = Math.floor(secondi / 3600);
+  const minuti = Math.floor(secondi / 60) % 60;
+  const due = (numero) => String(numero).padStart(2, "0");
+  return ore ? `${ore}:${due(minuti)}:${due(secondi % 60)}` : `${minuti}:${due(secondi % 60)}`;
+}
+
+function aggiornaOrologio() {
+  const trascorso = orologioDa === null ? 0 : Math.floor(performance.now() - orologioDa);
+  const tempo = formattaTempo((sessione?.durata ?? 0) + trascorso);
+  if (area("level-clock").textContent !== tempo) area("level-clock").textContent = tempo;
+}
+
+function avviaOrologio() {
+  if (orologioDa === null && sessione && !concluso() && !document.hidden &&
+      !document.querySelector("dialog[open]")) orologioDa = performance.now();
+  aggiornaOrologio();
+}
+
+function accumulaTempo() {
+  if (orologioDa === null) return;
+  const adesso = performance.now();
+  const trascorso = Math.floor(adesso - orologioDa);
+  sessione.durata += trascorso;
+  progressi.durata += trascorso;
+  orologioDa += trascorso;
+}
+
+function fermaOrologio() {
+  accumulaTempo();
+  orologioDa = null;
+}
+
+function sospendiPartita() {
+  fermaOrologio();
+  aggiornaOrologio();
+  if (progressi) registra();
+}
+
+setInterval(aggiornaOrologio, 250);
+setInterval(() => {
+  if (orologioDa === null) return;
+  accumulaTempo();
+  registra();
+}, 5000);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) sospendiPartita();
+  else avviaOrologio();
+});
+window.addEventListener("pagehide", sospendiPartita);
+window.addEventListener("pageshow", avviaOrologio);
+
+function apriDialog(dialogo, fuoco) {
+  sospendiPartita();
+  if (!dialogo.open) dialogo.showModal();
+  fuoco.focus({ preventScroll: true });
+  dialogo.scrollTop = 0;
+}
+
+for (const dialogo of [squadreDialog, risultatoDialog, finaleDialog]) {
+  dialogo.addEventListener("close", avviaOrologio);
+}
+
+function testoVerifiche(numero) {
+  return `${numero} ${numero === 1 ? "verifica" : "verifiche"}`;
+}
+
+function mostraStatistiche(destinazione, voci) {
+  destinazione.replaceChildren(...voci.map(([etichetta, valore]) => {
+    const scheda = elemento("div");
+    scheda.append(elemento("dt", "", etichetta), elemento("dd", "", valore));
+    return scheda;
+  }));
+}
+
+function mostraRisultato() {
+  if (!concluso()) return;
+  const attuale = sessione.verifiche;
+  const stelle = stellePer(attuale);
+  area("result-team").textContent = progressi.nome;
+  area("result-level").textContent = `${sezione.titolo} · Livello ${livello.numero} · Libri ${intervallo(livello)}`;
+  const valutazione = area("result-stars");
+  valutazione.hidden = attuale === 0;
+  valutazione.replaceChildren();
+  if (attuale) {
+    const simboli = elemento("span", "rating-marks", "★".repeat(stelle) + "☆".repeat(3 - stelle));
+    simboli.setAttribute("aria-hidden", "true");
+    valutazione.append(simboli, elemento("span", "rating-label", `${stelle} / 3 stelle`));
+  }
+  mostraStatistiche(area("result-stats"), [
+    ["Libri in ordine", livello.libri.length],
+    ["Verifiche", attuale || "—"],
+    ["Tempo", attuale ? formattaTempo(sessione.durata) : "—"],
+  ]);
+  const nota = area("result-best");
+  const migliore = sessione.migliore;
+  nota.hidden = attuale > 0 && migliore?.verifiche === attuale;
+  nota.textContent = attuale === 0
+    ? "Completato nella versione precedente. Rigiocate per registrare stelle, verifiche e tempo."
+    : `Risultato ufficiale · ${stellePer(migliore.verifiche)} / 3 stelle · ${testoVerifiche(migliore.verifiche)} · ${formattaTempo(migliore.durata)}`;
+  const sequenza = area("result-books");
+  sequenza.start = livello.libri[0].numero;
+  sequenza.replaceChildren(...livello.libri.map((libro) => elemento("li", "", libro.titolo)));
+  const tappa = prossimaTappa();
+  continua.textContent = tappa ? (tappa.sezione === sezione.id ? "Livello successivo" : "Prossima sezione") : "Vedi il finale";
+  apriDialog(risultatoDialog, area("result-title"));
+}
+
+function mostraFinale() {
+  const dati = riepilogo();
+  if (dati.livelli !== livelliBiblioteca.length) return;
+  area("finale-team").textContent = progressi.nome;
+  const insieme = area("finale-library");
+  insieme.replaceChildren(...biblioteca.map((raccolta, indice) => {
+    const riga = elemento("div", "finale-shelf");
+    riga.dataset.section = raccolta.id;
+    riga.style.setProperty("--shelf-index", indice);
+    const dorsi = elemento("div", "finale-spines");
+    dorsi.setAttribute("aria-hidden", "true");
+    for (const gruppo of raccolta.livelli) {
+      for (const libro of gruppo.libri) {
+        const dorso = elemento("span", "finale-spine");
+        dorso.title = libro.titolo;
+        dorsi.append(dorso);
+      }
+    }
+    riga.append(elemento("strong", "", raccolta.titolo), dorsi);
+    return riga;
+  }));
+  mostraStatistiche(area("finale-stats"), [
+    ["Libri", `${dati.libri} / ${totaleBiblioteca}`],
+    ["Livelli", `${dati.livelli} / ${livelliBiblioteca.length}`],
+    ["Stelle", `${dati.stelle} / ${massimoStelle}`],
+    ["Verifiche dei migliori risultati", dati.verificheMigliori],
+    ["Verifiche aggiuntive", dati.verificheAggiuntive],
+    ["Tempo di gioco", formattaTempo(dati.durata)],
+  ]);
+  area("finale-legacy-note").hidden = dati.completatiSenzaRisultato === 0;
+  apriDialog(finaleDialog, area("finale-title"));
+}
+
+function usaSquadra(squadra) {
+  fermaOrologio();
+  progressi = squadra;
+  archivio.attiva = squadra.id;
+  area("team-name").textContent = squadra.nome;
+  area("layout").hidden = false;
+  if (squadreDialog.open) squadreDialog.close();
+  const scelta = livelliBiblioteca.find((gruppo) => gruppo.id === squadra.attivo);
+  const raccolta = biblioteca.find((voce) => voce.id === scelta.sezione);
+  apriLivello(disponibile(scelta, raccolta) ? scelta : vistaSezione(raccolta), true);
+}
+
+function mostraSquadre() {
+  campoSquadra.value = "";
+  campoSquadra.setCustomValidity("");
+  area("saved-teams").hidden = !archivio.squadre.length;
+  area("close-teams").hidden = !progressi;
+  area("import-choice").hidden = !puoImportare();
+  area("import-progress").checked = true;
+  area("saved-team-buttons").replaceChildren(...archivio.squadre.map((squadra) => {
+    const voce = bottone("action-secondary", squadra.nome);
+    if (squadra === progressi) voce.setAttribute("aria-current", "true");
+    voce.addEventListener("click", () => usaSquadra(squadra));
+    return voce;
+  }));
+  apriDialog(squadreDialog, area("teams-title"));
+}
+
+area("team-form").addEventListener("submit", (evento) => {
+  evento.preventDefault();
+  const nome = nomeSquadra(campoSquadra.value);
+  const presente = archivio.squadre.some((squadra) => squadra.nome.localeCompare(nome, "it", { sensitivity: "base" }) === 0);
+  if (!nome || presente) {
+    campoSquadra.setCustomValidity(nome ? "Questo nome è già in uso. Sceglietene un altro o aprite la partita salvata." :
+      "Scrivete un nome per la squadra.");
+    campoSquadra.reportValidity();
+    return;
+  }
+  usaSquadra(creaSquadra(nome, area("import-progress").checked));
+});
+
+campoSquadra.addEventListener("input", () => campoSquadra.setCustomValidity(""));
+squadreDialog.addEventListener("cancel", (evento) => {
+  if (!progressi) evento.preventDefault();
+});
+area("close-teams").addEventListener("click", () => squadreDialog.close());
+area("team-control").addEventListener("click", mostraSquadre);
+area("show-finale").addEventListener("click", mostraFinale);
+area("new-team").addEventListener("click", () => {
+  finaleDialog.close();
+  mostraSquadre();
+});
+area("review-library").addEventListener("click", () => {
+  finaleDialog.close();
+  mappa.open = true;
+  const titoloMappa = mappa.querySelector("summary");
+  titoloMappa.focus({ preventScroll: true });
+  titoloMappa.scrollIntoView({ block: "nearest" });
+});
+
+const squadraSalvata = archivio.squadre.find((squadra) => squadra.id === archivio.attiva);
+if (squadraSalvata) usaSquadra(squadraSalvata);
+else mostraSquadre();

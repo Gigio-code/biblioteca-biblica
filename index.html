@@ -20,7 +20,7 @@
     </div>
   </header>
 
-  <main class="layout">
+  <main class="layout" id="layout" hidden>
     <aside class="library" aria-label="Mappa della biblioteca">
       <details id="library-details">
         <summary class="library-summary">
@@ -32,10 +32,18 @@
           <span class="library-meter" aria-hidden="true"><span id="library-meter-fill"></span></span>
         </summary>
         <nav id="library-sections" aria-label="Raccolte della Bibbia"></nav>
+        <dl class="summary-stats" id="library-stats"></dl>
+        <p class="legacy-note" id="legacy-note" hidden>Il conteggio di stelle, verifiche e tempo parte da questa versione.</p>
       </details>
     </aside>
 
     <section class="game" id="game" aria-labelledby="game-title">
+      <div class="team-bar">
+        <button class="team-control" id="team-control" type="button" aria-label="Gestisci squadre">
+          <span class="team-label">Squadra</span> <strong id="team-name"></strong>
+        </button>
+        <button class="team-control" id="show-finale" type="button" hidden>Rivedi il finale</button>
+      </div>
       <header class="intro">
         <p class="eyebrow" id="section-label"></p>
         <h1 id="game-title" tabindex="-1">Metti in fila i libri<span>.</span></h1>
@@ -46,12 +54,12 @@
         <p class="level-note" id="level-note"></p>
       </nav>
 
-      <noscript>Attiva JavaScript nel browser per giocare.</noscript>
       <div class="board" id="board">
         <section class="shelf-panel" id="shelf-panel" aria-labelledby="shelf-title">
           <div class="shelf-head">
             <h2 id="shelf-title">Lo scaffale</h2>
             <div class="progress">
+              <span class="level-clock" id="level-clock" role="timer" aria-label="Tempo del livello">0:00</span>
               <span id="placed-count"></span>
               <div id="progress-dots" class="progress-dots" aria-hidden="true"></div>
             </div>
@@ -71,9 +79,9 @@
         <div class="board-footer">
           <div class="feedback" id="feedback" role="status" aria-atomic="true"></div>
           <div class="actions">
-            <button class="reset" id="reset" type="button"><span aria-hidden="true">↻</span> Ricomincia</button>
+            <button class="reset" id="reset" type="button"><span aria-hidden="true">↻</span> Rimescola</button>
             <button class="verify" id="verify" type="button" disabled><span aria-hidden="true">✓</span> Verifica</button>
-            <button class="next" id="next" type="button" hidden>Prosegui</button>
+            <button class="next" id="view-result" type="button" hidden>Risultato</button>
           </div>
         </div>
         <p id="announcement" class="sr-only" role="status" aria-atomic="true"></p>
@@ -90,5 +98,62 @@
       <p id="storage-note" class="storage-note" role="status" hidden>Il browser non consente di salvare. I progressi valgono finché questa pagina resta aperta.</p>
     </section>
   </main>
+  <noscript><p class="canon-note">Attiva JavaScript nel browser per giocare.</p></noscript>
+
+  <dialog class="game-dialog" id="teams-dialog" aria-labelledby="teams-title">
+    <div class="dialog-body">
+      <p class="dialog-kicker">Sfida a squadre</p>
+      <h2 id="teams-title" tabindex="-1">Come si chiama la vostra squadra?</h2>
+      <p class="dialog-intro">Scegliete un nome di fantasia. La partita si salva in questo browser.</p>
+      <div id="saved-teams" hidden>
+        <h3>Partite salvate</h3>
+        <div class="saved-teams" id="saved-team-buttons"></div>
+      </div>
+      <form id="team-form">
+        <label for="team-input">Nome della squadra</label>
+        <input id="team-input" type="text" maxlength="32" required autocomplete="off" autocapitalize="sentences">
+        <label class="import-choice" id="import-choice" hidden>
+          <input type="checkbox" id="import-progress" checked>
+          <span>Recupera i progressi della versione precedente</span>
+        </label>
+        <div class="dialog-actions">
+          <button class="action-primary" type="submit">Inizia la partita</button>
+          <button class="action-secondary" id="close-teams" type="button" hidden>Torna al gioco</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <dialog class="game-dialog" id="result-dialog" aria-labelledby="result-title">
+    <div class="dialog-body">
+      <p class="dialog-kicker" id="result-team"></p>
+      <h2 id="result-title" tabindex="-1">Livello completato</h2>
+      <p id="result-level" class="dialog-intro"></p>
+      <div id="result-stars" class="rating"></div>
+      <dl class="result-stats" id="result-stats"></dl>
+      <p class="dialog-intro" id="result-best" hidden></p>
+      <ol class="result-books" id="result-books"></ol>
+      <div class="dialog-actions">
+        <button class="action-primary" id="next" type="button">Livello successivo</button>
+        <button class="action-secondary" id="replay" type="button">Rigioca il livello</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog class="game-dialog finale-dialog" id="finale-dialog" aria-labelledby="finale-title">
+    <div class="dialog-body">
+      <p class="dialog-kicker" id="finale-team"></p>
+      <h2 id="finale-title" tabindex="-1">LA BIBLIOTECA È COMPLETA!</h2>
+      <div class="finale-library" id="finale-library"></div>
+      <dl class="result-stats finale-stats" id="finale-stats"></dl>
+      <p class="finale-checks-note">Le verifiche aggiuntive sommano quelle degli altri tentativi, comprese le rivincite.</p>
+      <p class="finale-checks-note" id="finale-legacy-note" hidden>Per i livelli importati, stelle e verifiche si contano a partire dal primo risultato registrato.</p>
+      <p class="finale-question">Avete messo in ordine tutti i libri della Bibbia. Ma quanti di questi libri conoscete davvero?</p>
+      <div class="dialog-actions">
+        <button class="action-primary" id="review-library" type="button">Rivedi la biblioteca</button>
+        <button class="action-secondary" id="new-team" type="button">Nuova partita</button>
+      </div>
+    </div>
+  </dialog>
 </body>
 </html>
