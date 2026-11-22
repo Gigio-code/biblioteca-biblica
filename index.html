@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Ricostruisci la biblioteca biblica, uno scaffale alla volta, seguendo l’ordine della Bibbia CEI 2008.">
+  <meta name="theme-color" content="#f5f2eb">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./stile.css">
+  <script defer src="./biblioteca.js"></script>
+  <script defer src="./progressi.js"></script>
+  <script defer src="./gioco.js"></script>
+  <title>La Biblioteca Biblica</title>
+</head>
+<body>
+  <header class="masthead">
+    <div class="masthead-inner">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span> La Biblioteca Biblica</div>
+      <a class="edition" href="https://www.bibbiaedu.it/CEI2008/" target="_blank" rel="noopener">Bibbia CEI 2008 <span aria-hidden="true">↗</span></a>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="library" aria-label="Mappa della biblioteca">
+      <details id="library-details">
+        <summary class="library-summary">
+          <span class="library-title">La biblioteca</span>
+          <span class="library-numbers">
+            <strong id="library-count"></strong>
+            <span id="library-remaining"></span>
+          </span>
+          <span class="library-meter" aria-hidden="true"><span id="library-meter-fill"></span></span>
+        </summary>
+        <nav id="library-sections" aria-label="Raccolte della Bibbia"></nav>
+      </details>
+    </aside>
+
+    <section class="game" id="game" aria-labelledby="game-title">
+      <header class="intro">
+        <p class="eyebrow" id="section-label"></p>
+        <h1 id="game-title" tabindex="-1">Metti in fila i libri<span>.</span></h1>
+        <p class="intro-instruction">Tocca un libro, poi scegli la sua posizione sullo scaffale.</p>
+      </header>
+      <nav class="level-nav" id="level-nav" aria-label="Livelli della sezione" hidden>
+        <div class="level-buttons" id="level-buttons"></div>
+        <p class="level-note" id="level-note"></p>
+      </nav>
+
+      <noscript>Attiva JavaScript nel browser per giocare.</noscript>
+      <div class="board" id="board">
+        <section class="shelf-panel" id="shelf-panel" aria-labelledby="shelf-title">
+          <div class="shelf-head">
+            <h2 id="shelf-title">Lo scaffale</h2>
+            <div class="progress">
+              <span id="placed-count"></span>
+              <div id="progress-dots" class="progress-dots" aria-hidden="true"></div>
+            </div>
+          </div>
+          <div class="shelf" id="shelf" role="group" aria-label="Posizioni dello scaffale"></div>
+          <p class="shelf-tip" id="shelf-tip"></p>
+        </section>
+
+        <section class="tray" id="tray" aria-labelledby="tray-title">
+          <div class="tray-head">
+            <h2 id="tray-title">Libri da collocare</h2>
+            <span id="available-count" class="available-count"></span>
+          </div>
+          <div class="books" id="books" role="group" aria-label="Libri da collocare"></div>
+        </section>
+
+        <div class="board-footer">
+          <div class="feedback" id="feedback" role="status" aria-atomic="true"></div>
+          <div class="actions">
+            <button class="reset" id="reset" type="button"><span aria-hidden="true">↻</span> Ricomincia</button>
+            <button class="verify" id="verify" type="button" disabled><span aria-hidden="true">✓</span> Verifica</button>
+            <button class="next" id="next" type="button" hidden>Prosegui</button>
+          </div>
+        </div>
+        <p id="announcement" class="sr-only" role="status" aria-atomic="true"></p>
+      </div>
+
+      <details class="catalog" id="catalog">
+        <summary>
+          <span>Indice della sezione</span>
+          <span id="catalog-count"></span>
+        </summary>
+        <div id="catalog-list"></div>
+      </details>
+      <p class="canon-note">L’ordine canonico CEI raggruppa i libri in raccolte. La loro posizione non indica la data dei racconti o della scrittura.</p>
+      <p id="storage-note" class="storage-note" role="status" hidden>Il browser non consente di salvare. I progressi valgono finché questa pagina resta aperta.</p>
+    </section>
+  </main>
+</body>
+</html>
