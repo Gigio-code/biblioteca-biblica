@@ -3,8 +3,9 @@
 const livelliBiblioteca = biblioteca.flatMap((sezione) => sezione.livelli);
 const totaleBiblioteca = livelliBiblioteca.reduce((totale, livello) => totale + livello.libri.length, 0);
 const massimoStelle = livelliBiblioteca.length * 3;
-const chiavePrecedente = "biblioteca-biblica:v1";
-const chiaveProgressi = "biblioteca-biblica:v2";
+const chiaviPrecedenti = ["biblioteca-biblica:v1", "biblioteca-biblica:v2"];
+const chiaveProgressi = "biblioteca-biblica:v3";
+let puliziaDaFare = true;
 let salvataggioDisponibile = true;
 let progressi = null;
 
@@ -21,7 +22,7 @@ function risultatoValido(dati) {
   return { verifiche: dati.verifiche, durata: intero(dati.durata) };
 }
 
-function normalizzaPartita(dati, precedente = false) {
+function normalizzaPartita(dati) {
   const salvato = {
     attivo: livelliBiblioteca[0].id, sessioni: {}, verifiche: 0, durata: 0,
   };
@@ -37,21 +38,21 @@ function normalizzaPartita(dati, precedente = false) {
         !posizioni.every((codice) => codice === null || codici.has(codice))) continue;
     const collocati = posizioni.filter(Boolean);
     if (new Set(collocati).size !== collocati.length) continue;
-    const esatto = contaCorretti(livello, posizioni);
-    const storico = precedente ? stato.risolto === true : stato.storico === true;
-    const migliore = precedente ? null : risultatoValido(stato.migliore);
-    const verificato = precedente ? stato.verificato === true : stato.punteggio === esatto;
-    const verifiche = precedente ? 0 : intero(stato.verifiche);
+    const corrispondono = posizioniCorrette(livello, posizioni);
+    const esatto = corrispondono.filter(Boolean).length;
+    const migliore = risultatoValido(stato.migliore);
+    const verifiche = intero(stato.verifiche);
+    const punteggio = stato.punteggio === esatto && collocati.length === codici.size &&
+      (esatto < codici.size || migliore) ? esatto : null;
     salvato.sessioni[livello.id] = {
-      ordine, posizioni, verifiche,
-      durata: precedente ? 0 : intero(stato.durata),
-      punteggio: verificato && collocati.length === codici.size && (esatto < codici.size || storico || migliore) ? esatto : null,
-      migliore, storico,
+      ordine, posizioni, verifiche, punteggio, migliore, durata: intero(stato.durata),
+      confermate: corrispondono.map((corretta, indice) =>
+        corretta && (punteggio !== null || stato.confermate?.[indice] === true)),
     };
     salvato.verifiche += verifiche;
   }
-  salvato.verifiche = Math.max(salvato.verifiche, precedente ? 0 : intero(dati.verifiche));
-  salvato.durata = precedente ? 0 : intero(dati.durata);
+  salvato.verifiche = Math.max(salvato.verifiche, intero(dati.verifiche));
+  salvato.durata = intero(dati.durata);
   if (livelliBiblioteca.some((livello) => livello.id === dati.attivo)) salvato.attivo = dati.attivo;
   return salvato;
 }
@@ -65,30 +66,21 @@ function leggiDati(chiave) {
   }
 }
 
-const datiSquadre = leggiDati(chiaveProgressi);
-const archivio = {
-  attiva: null, squadre: [], importato: datiSquadre?.importato === true,
-};
+const datiAttuali = leggiDati(chiaveProgressi);
+const datiSquadre = datiAttuali ?? leggiDati(chiaviPrecedenti[1]);
+const archivio = { attiva: null, squadre: [] };
 if (Array.isArray(datiSquadre?.squadre)) {
   for (const dati of datiSquadre.squadre) {
     const nome = nomeSquadra(dati?.nome);
     if (!nome || typeof dati.id !== "string" || archivio.squadre.some((squadra) => squadra.id === dati.id)) continue;
-    archivio.squadre.push({ ...normalizzaPartita(dati), id: dati.id, nome });
+    archivio.squadre.push({ ...normalizzaPartita(datiAttuali ? dati : null), id: dati.id, nome });
   }
   const attiva = archivio.squadre.find((squadra) => squadra.id === datiSquadre.attiva);
   if (attiva) archivio.attiva = attiva.id;
 }
-const partitaPrecedente = normalizzaPartita(leggiDati(chiavePrecedente), true);
 
-function puoImportare() {
-  return !archivio.importato && Object.values(partitaPrecedente.sessioni).some((stato) =>
-    stato.storico || stato.posizioni.some(Boolean));
-}
-
-function creaSquadra(nome, importa) {
-  const partita = importa && puoImportare() ? partitaPrecedente : normalizzaPartita(null);
-  if (partita === partitaPrecedente) archivio.importato = true;
-  const squadra = { ...partita, id: Date.now().toString(36) + Math.random().toString(36).slice(2), nome };
+function creaSquadra(nome) {
+  const squadra = { ...normalizzaPartita(null), id: Date.now().toString(36) + Math.random().toString(36).slice(2), nome };
   archivio.squadre.push(squadra);
   return squadra;
 }
@@ -97,6 +89,10 @@ function salvaProgressi() {
   if (!salvataggioDisponibile) return false;
   try {
     localStorage.setItem(chiaveProgressi, JSON.stringify(archivio));
+    if (puliziaDaFare) {
+      for (const chiave of chiaviPrecedenti) localStorage.removeItem(chiave);
+      puliziaDaFare = false;
+    }
     return true;
   } catch {
     salvataggioDisponibile = false;
@@ -104,8 +100,8 @@ function salvaProgressi() {
   }
 }
 
-function contaCorretti(livello, posizioni) {
-  return posizioni.reduce((totale, codice, indice) => totale + Number(codice === livello.libri[indice].id), 0);
+function posizioniCorrette(livello, posizioni) {
+  return posizioni.map((codice, indice) => codice === livello.libri[indice].id);
 }
 
 function stellePer(verifiche) {
@@ -118,12 +114,12 @@ function miglioreTra(prima, dopo) {
 
 function risolto(livello) {
   const stato = progressi?.sessioni[livello.id];
-  return Boolean(stato?.migliore || stato?.storico);
+  return Boolean(stato?.migliore);
 }
 
 function riepilogo() {
   const completati = livelliBiblioteca.filter(risolto);
-  const risultati = completati.map((livello) => progressi.sessioni[livello.id].migliore).filter(Boolean);
+  const risultati = completati.map((livello) => progressi.sessioni[livello.id].migliore);
   const verifiche = progressi?.verifiche ?? 0;
   const verificheMigliori = risultati.reduce((totale, risultato) => totale + risultato.verifiche, 0);
   return {
@@ -134,7 +130,6 @@ function riepilogo() {
     verifiche,
     verificheMigliori,
     verificheAggiuntive: Math.max(0, verifiche - verificheMigliori),
-    completatiSenzaRisultato: completati.length - risultati.length,
     durata: progressi?.durata ?? 0,
   };
 }

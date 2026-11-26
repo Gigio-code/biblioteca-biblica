@@ -6,10 +6,10 @@
   <meta name="description" content="Ricostruisci la biblioteca biblica, uno scaffale alla volta, seguendo l’ordine della Bibbia CEI 2008.">
   <meta name="theme-color" content="#f5f2eb">
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="./stile.css">
+  <link rel="stylesheet" href="./stile.css?v=spunte">
   <script defer src="./biblioteca.js"></script>
-  <script defer src="./progressi.js"></script>
-  <script defer src="./gioco.js"></script>
+  <script defer src="./progressi.js?v=spunte"></script>
+  <script defer src="./gioco.js?v=spunte"></script>
   <title>La Biblioteca Biblica</title>
 </head>
 <body>
@@ -31,9 +31,9 @@
           </span>
           <span class="library-meter" aria-hidden="true"><span id="library-meter-fill"></span></span>
         </summary>
+        <p class="library-rule">Completa tutti i livelli di una sezione per aprire la successiva.</p>
         <nav id="library-sections" aria-label="Raccolte della Bibbia"></nav>
         <dl class="summary-stats" id="library-stats"></dl>
-        <p class="legacy-note" id="legacy-note" hidden>Il conteggio di stelle, verifiche e tempo parte da questa versione.</p>
       </details>
     </aside>
 
@@ -112,10 +112,6 @@
       <form id="team-form">
         <label for="team-input">Nome della squadra</label>
         <input id="team-input" type="text" maxlength="32" required autocomplete="off" autocapitalize="sentences">
-        <label class="import-choice" id="import-choice" hidden>
-          <input type="checkbox" id="import-progress" checked>
-          <span>Recupera i progressi della versione precedente</span>
-        </label>
         <div class="dialog-actions">
           <button class="action-primary" type="submit">Inizia la partita</button>
           <button class="action-secondary" id="close-teams" type="button" hidden>Torna al gioco</button>
@@ -147,7 +143,6 @@
       <div class="finale-library" id="finale-library"></div>
       <dl class="result-stats finale-stats" id="finale-stats"></dl>
       <p class="finale-checks-note">Le verifiche aggiuntive sommano quelle degli altri tentativi, comprese le rivincite.</p>
-      <p class="finale-checks-note" id="finale-legacy-note" hidden>Per i livelli importati, stelle e verifiche si contano a partire dal primo risultato registrato.</p>
       <p class="finale-question">Avete messo in ordine tutti i libri della Bibbia. Ma quanti di questi libri conoscete davvero?</p>
       <div class="dialog-actions">
         <button class="action-primary" id="review-library" type="button">Rivedi la biblioteca</button>

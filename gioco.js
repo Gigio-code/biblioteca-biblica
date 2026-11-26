@@ -60,13 +60,21 @@ function nuovaSessione(scelta, precedente) {
     punteggio: null,
     verifiche: 0,
     durata: 0,
-    storico: precedente?.storico === true,
+    confermate: Array(scelta.libri.length).fill(false),
     migliore: precedente?.migliore ?? null,
   };
 }
 
+function sezioneDisponibile(raccolta) {
+  return biblioteca.slice(0, biblioteca.indexOf(raccolta)).every((voce) => voce.livelli.every(risolto));
+}
+
 function disponibile(scelta, raccolta) {
-  return raccolta.livelli.slice(0, scelta.numero - 1).every(risolto);
+  return sezioneDisponibile(raccolta) && raccolta.livelli.slice(0, scelta.numero - 1).every(risolto);
+}
+
+function primaSezioneIncompleta() {
+  return biblioteca.find((raccolta) => !raccolta.livelli.every(risolto));
 }
 
 function libriSistemati(scelta) {
@@ -121,9 +129,7 @@ function vistaSezione(raccolta) {
 function prossimaTappa() {
   const successivo = sezione.livelli.slice(livello.numero).find((gruppo) => !risolto(gruppo));
   if (successivo) return successivo;
-  const indice = biblioteca.indexOf(sezione);
-  const altre = [...biblioteca.slice(indice + 1), ...biblioteca.slice(0, indice)];
-  const incompleta = altre.find((voce) => !voce.livelli.every(risolto));
+  const incompleta = primaSezioneIncompleta();
   return incompleta ? vistaSezione(incompleta) : null;
 }
 
@@ -141,7 +147,6 @@ function mostraMappa() {
     ["Verifiche", dati.verifiche],
   ]);
   area("show-finale").hidden = dati.livelli !== livelliBiblioteca.length;
-  area("legacy-note").hidden = !Object.values(progressi.sessioni).some((stato) => stato.storico);
   area("library-count").textContent = `${sistemati} / ${totaleBiblioteca} sistemati`;
   area("library-remaining").textContent = `${totaleBiblioteca - sistemati} da sistemare`;
   area("library-meter-fill").style.width = `${sistemati / totaleBiblioteca * 100}%`;
@@ -158,8 +163,10 @@ function mostraMappa() {
       const completa = quanti === raccolta.totale;
       const bottoneSezione = bottone("section-row");
       bottoneSezione.dataset.section = raccolta.id;
+      bottoneSezione.disabled = !sezioneDisponibile(raccolta);
+      const stato = completa ? ", sezione completata" : bottoneSezione.disabled ? ", da sbloccare" : "";
       bottoneSezione.setAttribute("aria-label",
-        `${raccolta.titolo}, ${quanti} di ${raccolta.totale} libri sistemati${completa ? ", sezione completata" : ""}`);
+        `${raccolta.titolo}, ${quanti} di ${raccolta.totale} libri sistemati${stato}`);
       if (aperta) bottoneSezione.setAttribute("aria-current", "true");
       const colore = elemento("span", "section-icon");
       colore.setAttribute("aria-hidden", "true");
@@ -259,14 +266,23 @@ function mostraScaffale() {
     const numero = livello.libri[indice].numero;
     const libro = livello.libri.find((voce) => voce.id === codice);
     const slot = bottone("slot");
-    slot.setAttribute("aria-label", `Posizione ${numero}, ${libro?.titolo ?? "vuota"}`);
+    const confermata = sessione.confermate[indice];
+    slot.setAttribute("aria-label", `Posizione ${numero}, ${libro?.titolo ?? "vuota"}${confermata ? ", confermata" : ""}`);
+    slot.classList.toggle("confirmed", confermata);
     slot.disabled = concluso();
     if (libro) {
       slot.classList.add("occupied");
       slot.setAttribute("aria-pressed", String(codice === selezione));
     }
     if (selezione && codice !== selezione) slot.classList.add("destination");
-    slot.append(elemento("span", "slot-number", numero), libro ? dorso(libro) : elemento("span", "slot-empty", "+"));
+    const posizione = elemento("span", "slot-index");
+    posizione.append(elemento("span", "slot-number", numero));
+    if (confermata) {
+      const spunta = elemento("span", "slot-check", "✓");
+      spunta.setAttribute("aria-hidden", "true");
+      posizione.append(spunta);
+    }
+    slot.append(posizione, libro ? dorso(libro) : elemento("span", "slot-empty", "+"));
     slot.addEventListener("click", (evento) => {
       toccaPosizione(indice, evento.detail === 0);
     });
@@ -316,9 +332,12 @@ function mostraGioco() {
   area("progress-dots").replaceChildren(...livello.libri.map((_, indice) =>
     elemento("span", indice < collocati ? "filled" : "")));
   const selezionato = livello.libri.find((libro) => libro.id === selezione);
+  const haSpunte = sessione.confermate.some(Boolean);
+  const consiglio = haSpunte
+    ? "Lasciate fermi i libri con la spunta. Per scambiare gli altri, toccateli uno dopo l’altro."
+    : "Per scambiare due libri, toccateli uno dopo l’altro sullo scaffale.";
   shelfTip.textContent = concluso() ? "Sequenza completata." : selezionato
-    ? `${selezionato.titolo} selezionato. Tocca una posizione.`
-    : "Per scambiare due libri, toccali uno dopo l’altro sullo scaffale.";
+    ? `${selezionato.titolo} selezionato. Tocca una posizione.` : consiglio;
   board.classList.toggle("placing", Boolean(selezione));
   verifica.disabled = collocati !== totale || sessione.punteggio !== null;
   area("reset").hidden = concluso();
@@ -337,7 +356,8 @@ function mostraGioco() {
   feedback.replaceChildren(
     elemento("strong", "", `${corretti} ${corretti === 1 ? "libro" : "libri"} su ${totale} in posizione corretta`),
     elemento("span", "", concluso() ? "Avete completato lo scaffale." :
-      "Discutete e riprovate!"),
+      haSpunte ? "Riordinate i libri senza spunta, poi verificate di nuovo." :
+        "Scambiate i libri e verificate di nuovo."),
   );
 }
 
@@ -356,7 +376,11 @@ function toccaPosizione(indice, daTastiera) {
   const libro = livello.libri.find((voce) => voce.id === selezione);
   const sostituito = livello.libri.find((voce) => voce.id === codice);
   sessione.posizioni[indice] = selezione;
-  if (origine !== -1) sessione.posizioni[origine] = codice;
+  sessione.confermate[indice] = false;
+  if (origine !== -1) {
+    sessione.posizioni[origine] = codice;
+    sessione.confermate[origine] = false;
+  }
   selezione = null;
   sessione.punteggio = null;
   mostraGioco();
@@ -371,12 +395,13 @@ function toccaPosizione(indice, daTastiera) {
   else if (origine === -1) portaInVista(books.querySelector(".book") ?? verifica);
 }
 
-verifica.addEventListener("click", () => {
+verifica.addEventListener("click", (evento) => {
   if (verifica.disabled) return;
   selezione = null;
   sessione.verifiche++;
   progressi.verifiche++;
-  const corretti = contaCorretti(livello, sessione.posizioni);
+  sessione.confermate = posizioniCorrette(livello, sessione.posizioni);
+  const corretti = sessione.confermate.filter(Boolean).length;
   if (corretti === livello.libri.length) {
     fermaOrologio();
     const risultato = { verifiche: sessione.verifiche, durata: sessione.durata };
@@ -387,12 +412,14 @@ verifica.addEventListener("click", () => {
   mostraGioco();
   registra();
   if (concluso()) mostraRisultato();
+  else if (evento.detail > 0) portaInVista(shelf);
 });
 
 area("reset").addEventListener("click", () => {
   if (concluso()) return;
   sessione.ordine = mescola(livello.libri, sessione.ordine);
   sessione.posizioni.fill(null);
+  sessione.confermate.fill(false);
   sessione.punteggio = null;
   selezione = null;
   mostraGioco();
@@ -523,24 +550,18 @@ function mostraRisultato() {
   area("result-team").textContent = progressi.nome;
   area("result-level").textContent = `${sezione.titolo} · Livello ${livello.numero} · Libri ${intervallo(livello)}`;
   const valutazione = area("result-stars");
-  valutazione.hidden = attuale === 0;
-  valutazione.replaceChildren();
-  if (attuale) {
-    const simboli = elemento("span", "rating-marks", "★".repeat(stelle) + "☆".repeat(3 - stelle));
-    simboli.setAttribute("aria-hidden", "true");
-    valutazione.append(simboli, elemento("span", "rating-label", `${stelle} / 3 stelle`));
-  }
+  const simboli = elemento("span", "rating-marks", "★".repeat(stelle) + "☆".repeat(3 - stelle));
+  simboli.setAttribute("aria-hidden", "true");
+  valutazione.replaceChildren(simboli, elemento("span", "rating-label", `${stelle} / 3 stelle`));
   mostraStatistiche(area("result-stats"), [
     ["Libri in ordine", livello.libri.length],
-    ["Verifiche", attuale || "—"],
-    ["Tempo", attuale ? formattaTempo(sessione.durata) : "—"],
+    ["Verifiche", attuale],
+    ["Tempo", formattaTempo(sessione.durata)],
   ]);
   const nota = area("result-best");
   const migliore = sessione.migliore;
-  nota.hidden = attuale > 0 && migliore?.verifiche === attuale;
-  nota.textContent = attuale === 0
-    ? "Completato nella versione precedente. Rigiocate per registrare stelle, verifiche e tempo."
-    : `Risultato ufficiale · ${stellePer(migliore.verifiche)} / 3 stelle · ${testoVerifiche(migliore.verifiche)} · ${formattaTempo(migliore.durata)}`;
+  nota.hidden = migliore.verifiche === attuale;
+  nota.textContent = `Risultato ufficiale · ${stellePer(migliore.verifiche)} / 3 stelle · ${testoVerifiche(migliore.verifiche)} · ${formattaTempo(migliore.durata)}`;
   const sequenza = area("result-books");
   sequenza.start = livello.libri[0].numero;
   sequenza.replaceChildren(...livello.libri.map((libro) => elemento("li", "", libro.titolo)));
@@ -578,7 +599,6 @@ function mostraFinale() {
     ["Verifiche aggiuntive", dati.verificheAggiuntive],
     ["Tempo di gioco", formattaTempo(dati.durata)],
   ]);
-  area("finale-legacy-note").hidden = dati.completatiSenzaRisultato === 0;
   apriDialog(finaleDialog, area("finale-title"));
 }
 
@@ -591,7 +611,8 @@ function usaSquadra(squadra) {
   if (squadreDialog.open) squadreDialog.close();
   const scelta = livelliBiblioteca.find((gruppo) => gruppo.id === squadra.attivo);
   const raccolta = biblioteca.find((voce) => voce.id === scelta.sezione);
-  apriLivello(disponibile(scelta, raccolta) ? scelta : vistaSezione(raccolta), true);
+  const ripresa = disponibile(scelta, raccolta) ? scelta : vistaSezione(primaSezioneIncompleta() ?? raccolta);
+  apriLivello(ripresa, true);
 }
 
 function mostraSquadre() {
@@ -599,8 +620,6 @@ function mostraSquadre() {
   campoSquadra.setCustomValidity("");
   area("saved-teams").hidden = !archivio.squadre.length;
   area("close-teams").hidden = !progressi;
-  area("import-choice").hidden = !puoImportare();
-  area("import-progress").checked = true;
   area("saved-team-buttons").replaceChildren(...archivio.squadre.map((squadra) => {
     const voce = bottone("action-secondary", squadra.nome);
     if (squadra === progressi) voce.setAttribute("aria-current", "true");
@@ -620,7 +639,7 @@ area("team-form").addEventListener("submit", (evento) => {
     campoSquadra.reportValidity();
     return;
   }
-  usaSquadra(creaSquadra(nome, area("import-progress").checked));
+  usaSquadra(creaSquadra(nome));
 });
 
 campoSquadra.addEventListener("input", () => campoSquadra.setCustomValidity(""));
@@ -644,4 +663,7 @@ area("review-library").addEventListener("click", () => {
 
 const squadraSalvata = archivio.squadre.find((squadra) => squadra.id === archivio.attiva);
 if (squadraSalvata) usaSquadra(squadraSalvata);
-else mostraSquadre();
+else {
+  registra();
+  mostraSquadre();
+}

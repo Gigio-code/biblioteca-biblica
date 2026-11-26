@@ -335,9 +335,23 @@ details[open] > .library-summary::after { transform: translateY(3px) rotate(225d
 }
 .slot:focus-visible { z-index: 1; outline-color: #ffdb9c; }
 .slot.occupied { border-color: transparent; background: transparent; }
+.slot.confirmed { border: 1px solid #b9dec4; }
 .slot.destination { border-color: #e8c591; background-color: #ffdb9c0a; }
 .slot[aria-pressed="true"] { border: 1px solid #ffdb9c; box-shadow: inset 0 0 0 1px #ffdb9c; }
 .placing .slot[aria-pressed="true"] { border-color: #ffdb9c; }
+.slot-index { display: flex; justify-content: center; align-items: center; gap: 5px; }
+.slot-check {
+  display: grid;
+  place-items: center;
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 50%;
+  color: #163b2a;
+  background: #d0f1d9;
+  font-size: .82rem;
+  font-weight: 850;
+  line-height: 1;
+}
 .slot-number { display: block; font-size: .875rem; font-weight: 700; text-align: center; }
 .slot-empty {
   display: grid;
@@ -483,7 +497,7 @@ details[open] > .library-summary::after { transform: translateY(3px) rotate(225d
   .slot:hover { border-color: #e8c591; }
   .reset:hover { background: #f1eee4; }
   .verify:not(:disabled):hover { background: var(--accent); }
-  .section-row:hover, .level-button:not(:disabled):hover { background: var(--accent-soft); }
+  .section-row:not(:disabled):hover, .level-button:not(:disabled):hover { background: var(--accent-soft); }
 }
 
 #game-title:focus { outline: none; }
@@ -634,7 +648,8 @@ details[open] > .library-summary::after { transform: translateY(3px) rotate(225d
     padding: 2px 4px;
     border-radius: 6px;
   }
-  .slot-number { align-self: center; }
+  .slot-index { align-self: center; flex-direction: column; gap: 1px; }
+  .slot-check { width: .9rem; height: .9rem; font-size: .73rem; }
   .slot-empty { place-self: center end; width: 24px; height: 24px; margin: 0 3px 0 0; }
   .slot .cover { border-radius: 5px; }
   .shelf-tip { min-height: 2.6em; margin: 9px 0 0; font-size: .8125rem; }
@@ -769,7 +784,25 @@ details[open] > .library-summary::after { transform: translateY(3px) rotate(225d
   font-weight: 760;
   font-variant-numeric: tabular-nums;
 }
-.legacy-note { margin: 8px 7px 1px; color: var(--muted); font-size: .8125rem; line-height: 1.35; }
+.library-rule { margin: 8px 7px 4px; color: var(--muted); font-size: .8125rem; line-height: 1.35; }
+.section-row:disabled { opacity: .63; }
+.section-row:disabled .section-icon {
+  position: relative;
+  height: 8px;
+  margin-top: 4px;
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  background: none;
+  box-shadow: none;
+}
+.section-row:disabled .section-icon::before {
+  position: absolute;
+  inset: -5px 1px auto;
+  height: 5px;
+  border: 1px solid var(--accent);
+  border-radius: 4px 4px 0 0;
+  content: "";
+}
 .catalog-group .catalog-rating { margin-top: 9px; color: var(--accent); font-weight: 730; }
 
 .game-dialog {
@@ -820,15 +853,6 @@ details[open] > .library-summary::after { transform: translateY(3px) rotate(225d
   font: inherit;
 }
 #team-input:focus-visible { outline: 2px solid #3f6854; outline-offset: 2px; }
-#team-form .import-choice {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  font-size: .875rem;
-  font-weight: 550;
-}
-.import-choice input { width: 20px; height: 20px; flex: none; accent-color: #3f6854; }
 #saved-teams { border-bottom: 1px solid var(--border); padding-bottom: 12px; }
 #saved-teams h3 { font-size: .9rem; margin-bottom: 7px; }
 .saved-teams, .dialog-actions { display: flex; flex-wrap: wrap; gap: 8px; }
